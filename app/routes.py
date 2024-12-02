@@ -7,7 +7,8 @@ from flask_jwt_extended import (
 from auth_middleware import token_required
 
 from app.config import Config
-from app.models import db, User, Feedback
+from app.models import db, User, Feedback, Team, TeamStatus, Mentor, TeamMember
+
 api_bp = Blueprint("api", __name__)
 
 @api_bp.route("/signup", methods=["POST"])
@@ -113,3 +114,160 @@ def get_feedback(id):
                 "message": str(e)
             }), 500
 
+@api_bp.route('/update_team_status/<int:teamno>', methods=['PUT'])
+def update_team_status(teamno):
+    data = request.json
+    team = Team.query.get_or_404(teamno)
+    try:
+        team.status = TeamStatus(data['status'])
+        db.session.commit()
+        return jsonify({"message": "Status updated successfully!"})
+    except ValueError:
+        return jsonify({"error": "Invalid status value"}), 400
+
+@api_bp.route('/get_all_teams', methods=['GET'])
+def get_all_teams():
+    teams = Team.query.all()
+
+    result = []
+    for team in teams:
+        result.append({
+            "teamno": team.teamno,
+            "team_name": team.team_name,
+            "lab_assigned": team.lab_assigned,
+            "status": team.status.value,
+            "members": [
+                {
+                    "role": member.role,
+                    "name": member.name,
+                    "email": member.email
+                } for member in team.members
+            ]
+        })
+
+    return jsonify(result)
+
+
+@api_bp.route('/get_team/<int:teamno>', methods=['GET'])
+def get_team(teamno):
+    team = Team.query.get_or_404(teamno)
+    return jsonify({
+        "teamno": team.teamno,
+        "team_name": team.team_name,
+        "lab_assigned": team.lab_assigned,
+        "status": team.status.value,
+        "members": [
+            {
+                "name": member.name,
+                "role": member.role,
+                "email": member.email
+            }
+            for member in team.members
+        ]
+    })
+
+@api_bp.route('/mentors', methods=['GET'])
+def get_mentors():
+    mentors = Mentor.query.all()
+    mentor_list = [
+        {
+            'id': mentor.id,
+            'name': mentor.name,
+            'email': mentor.email,
+            'expertise': mentor.domain,
+            'teams': [
+                {
+                    'teamno': team.teamno,
+                    'team_name': team.team_name,
+                    'lab_assigned': team.lab_assigned,
+                    'status': team.status.value,
+                    'members': [
+                                {
+                                    "name": member.name,
+                                    "role": member.role,
+                                    "email": member.email
+                                }
+                                for member in team.members
+                    ]
+                }
+                for team in mentor.teams
+            ]
+        }
+        for mentor in mentors
+    ]
+    return jsonify(mentor_list), 200
+
+@api_bp.route('/mentors', methods=['POST'])
+def create_mentor():
+    data = request.get_json()
+    if not data.get('name') or not data.get('email'):
+        return jsonify({'error': 'Name and Email are required fields'}), 400
+
+    existing_mentor = Mentor.query.filter_by(email=data['email']).first()
+    if existing_mentor:
+        return jsonify({'error': 'Mentor with this email already exists'}), 400
+
+    mentor = Mentor(name=data['name'], email=data['email'], domain=data.get('domain', ''))
+    db.session.add(mentor)
+    db.session.commit()
+
+    return jsonify({'message': 'Mentor created successfully', 'mentor_id': mentor.id}), 201
+
+@api_bp.route('/update_mentors/<int:mentor_id>', methods=['PUT'])
+def assignee_mentors(mentor_id):
+    data = request.get_json()
+    if not data.get("team_id"):
+        return jsonify({'error': 'team_id is required'}), 400
+    mentor = Mentor.query.get(mentor_id)
+    if not mentor:
+        return jsonify({'error': 'Mentor not found'}), 404
+    team_ids = []
+    team_id = data.get("team_id")
+    for ids in team_id:
+        team = Team.query.get(ids)
+        team_ids.append(team)
+    mentor.teams = team_ids
+    db.session.add(mentor)
+    db.session.commit()
+
+    return jsonify({'success': f'Team assigneed to mentor {mentor.name}'}), 200
+
+@api_bp.route('/create_team', methods=['POST'])
+def create_team():
+    data = request.get_json()
+
+    # Validate required fields for the team
+    if not data.get("team_name") or not data.get("lab_assigned"):
+        return jsonify({'error': 'team_name and lab_assigned are required'}), 400
+
+    # Validate members field
+    members = data.get("members", [])
+    if not isinstance(members, list) or not members:
+        return jsonify({'error': 'At least one member must be provided'}), 400
+
+    # Create a new Team
+    new_team = Team(
+        team_name=data["team_name"],
+        lab_assigned=data["lab_assigned"],
+        status=data.get("status", TeamStatus.UPCOMING)
+    )
+    db.session.add(new_team)
+    db.session.commit()  # Commit to get the team ID for member association
+
+    # Add team members
+    for member in members:
+        if not member.get("name") or not member.get("role"):
+            return jsonify({'error': 'Each member must have a name and role'}), 400
+
+        new_member = TeamMember(
+            team_id=new_team.teamno,
+            name=member["name"],
+            role=member["role"],
+            email=member.get("email")  # Email is optional
+        )
+        db.session.add(new_member)
+
+    # Commit all changes
+    db.session.commit()
+
+    return jsonify({'success': 'Team and members created successfully', 'team_id': new_team.teamno}), 201
