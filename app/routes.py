@@ -264,25 +264,21 @@ def assignee_mentors(mentor_id):
 def create_team():
     data = request.get_json()
 
-    # Validate required fields for the team
     if not data.get("team_name") or not data.get("lab_assigned"):
         return jsonify({'error': 'team_name and lab_assigned are required'}), 400
 
-    # Validate members field
     members = data.get("members", [])
     if not isinstance(members, list) or not members:
         return jsonify({'error': 'At least one member must be provided'}), 400
 
-    # Create a new Team
     new_team = Team(
         team_name=data["team_name"],
         lab_assigned=data["lab_assigned"],
         status=data.get("status", TeamStatus.UPCOMING)
     )
     db.session.add(new_team)
-    db.session.commit()  # Commit to get the team ID for member association
+    db.session.commit()
 
-    # Add team members
     for member in members:
         if not member.get("name") or not member.get("role"):
             return jsonify({'error': 'Each member must have a name and role'}), 400
@@ -291,11 +287,10 @@ def create_team():
             team_id=new_team.teamno,
             name=member["name"],
             role=member["role"],
-            email=member.get("email")  # Email is optional
+            email=member.get("email")
         )
         db.session.add(new_member)
 
-    # Commit all changes
     db.session.commit()
 
     return jsonify({'success': 'Team and members created successfully', 'team_id': new_team.teamno}), 201
