@@ -125,76 +125,104 @@ def update_team_status(teamno):
     except ValueError:
         return jsonify({"error": "Invalid status value"}), 400
 
-@api_bp.route('/get_all_teams', methods=['GET'])
-def get_all_teams():
-    teams = Team.query.all()
-
-    result = []
-    for team in teams:
-        result.append({
+@api_bp.route('/get_team/', defaults={'teamno': None}, methods=['GET'])
+@api_bp.route('/get_team/<int:teamno>', methods=['GET'])
+def get_team(teamno):
+    if teamno:
+        team = Team.query.get_or_404(teamno)
+        result = {
             "teamno": team.teamno,
             "team_name": team.team_name,
             "lab_assigned": team.lab_assigned,
             "status": team.status.value,
             "members": [
                 {
-                    "role": member.role,
                     "name": member.name,
+                    "role": member.role,
                     "email": member.email
-                } for member in team.members
-            ]
-        })
-
-    return jsonify(result)
-
-
-@api_bp.route('/get_team/<int:teamno>', methods=['GET'])
-def get_team(teamno):
-    team = Team.query.get_or_404(teamno)
-    return jsonify({
-        "teamno": team.teamno,
-        "team_name": team.team_name,
-        "lab_assigned": team.lab_assigned,
-        "status": team.status.value,
-        "members": [
-            {
-                "name": member.name,
-                "role": member.role,
-                "email": member.email
-            }
-            for member in team.members
-        ]
-    })
-
-@api_bp.route('/mentors', methods=['GET'])
-def get_mentors():
-    mentors = Mentor.query.all()
-    mentor_list = [
-        {
-            'id': mentor.id,
-            'name': mentor.name,
-            'email': mentor.email,
-            'expertise': mentor.domain,
-            'teams': [
-                {
-                    'teamno': team.teamno,
-                    'team_name': team.team_name,
-                    'lab_assigned': team.lab_assigned,
-                    'status': team.status.value,
-                    'members': [
-                                {
-                                    "name": member.name,
-                                    "role": member.role,
-                                    "email": member.email
-                                }
-                                for member in team.members
-                    ]
                 }
-                for team in mentor.teams
+                for member in team.members
             ]
         }
-        for mentor in mentors
-    ]
+    else:
+        teams = Team.query.all()
+        result = [
+            {
+                "teamno": team.teamno,
+                "team_name": team.team_name,
+                "lab_assigned": team.lab_assigned,
+                "status": team.status.value,
+                "members": [
+                    {
+                        "name": member.name,
+                        "role": member.role,
+                        "email": member.email
+                    }
+                    for member in team.members
+                ]
+            }
+            for team in teams
+        ]
+    return jsonify(result)
+
+@api_bp.route('/get_mentor/', defaults={'mentorid': None}, methods=['GET'])
+@api_bp.route('/get_mentor/<int:mentorid>', methods=['GET'])
+def get_mentors(mentorid):
+    if mentorid:
+        mentors = Mentor.query.get_or_404(mentorid)
+        mentor_list = [
+            {
+                'id': mentors.id,
+                'name': mentors.name,
+                'email': mentors.email,
+                'expertise': mentors.domain,
+                'teams': [
+                    {
+                        'teamno': team.teamno,
+                        'team_name': team.team_name,
+                        'lab_assigned': team.lab_assigned,
+                        'status': team.status.value,
+                        'members': [
+                                    {
+                                        "name": member.name,
+                                        "role": member.role,
+                                        "email": member.email
+                                    }
+                                    for member in team.members
+                        ]
+                    }
+                    for team in mentors.teams
+                ]
+            }
+        ]
+    else:
+        mentors = Mentor.query.all()
+        mentor_list = [
+            {
+                'id': mentor.id,
+                'name': mentor.name,
+                'email': mentor.email,
+                'expertise': mentor.domain,
+                'teams': [
+                    {
+                        'teamno': team.teamno,
+                        'team_name': team.team_name,
+                        'lab_assigned': team.lab_assigned,
+                        'status': team.status.value,
+                        'members': [
+                                    {
+                                        "name": member.name,
+                                        "role": member.role,
+                                        "email": member.email
+                                    }
+                                    for member in team.members
+                        ]
+                    }
+                    for team in mentor.teams
+                ]
+            }
+            for mentor in mentors
+        ]
     return jsonify(mentor_list), 200
 
 @api_bp.route('/mentors', methods=['POST'])
